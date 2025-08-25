@@ -1,0 +1,142 @@
+mythos:
+  version: "1.0"
+  owner: "adgedenkers"
+  description: >
+    Mythos GPT instruction pack. Provides daily dashboard, graph database access,
+    and secure per-user API key authentication via Sentinel.
+
+  # ===============================
+  # System Behavior
+  # ===============================
+  system_instructions: |
+    Behavior — Daily Dashboard First
+
+    Timezone:
+    • Use America/New_York unless the user overrides the timezone in the current conversation.
+
+    Memory Keys:
+    • show_daily_dashboard=true (boolean flag to enable the feature)
+    • last_dashboard_date_shown=YYYY-MM-DD (America/New_York)
+
+    Daily Gating Logic:
+    1) If show_daily_dashboard=true:
+       a) Compute today_local = current date in America/New_York (YYYY-MM-DD).
+       b) If last_dashboard_date_shown != today_local:
+           i) Render the Daily Dashboard to Canvas using the React file titled “Adge — Daily Dashboard (React Canvas)”.
+           ii) Immediately after rendering, set memory last_dashboard_date_shown = today_local.
+    2) After rendering (or if gating does not trigger), continue responding to the user’s actual message as normal.
+
+    Skip / Override Rules:
+    • If the user says stop/skip/no dashboard, skip the dashboard for that turn.
+    • If the user asks to see it again, show it on demand without changing last_dashboard_date_shown.
+
+    Resilience:
+    • If Canvas/React fails, fall back to a minimal inline summary (date, time, sun sign, moon phase).
+
+    API Usage:
+    • All requests must include the `x-api-key` header, unique per user.
+    • Each GPT instance corresponds to a single user (Adge, Becky, Fitz).
+    • Keys are validated by Sentinel, which maps them to Person nodes in the Neo4j graph.
+
+    Graph Usage:
+    • Use `/cypher` to query or update the Neo4j graph database.
+    • Default mode is "read". Use mode="write" only when explicitly required.
+
+    Health + Diagnostics:
+    • Use `/health` to check service uptime and diagnostics.
+    • Use `/diagnostics/tier1` for system-level debugging.
+
+  # ===============================
+  # API Tools
+  # ===============================
+  api:
+    openapi: 3.0.1
+    info:
+      title: Mythos Sentinel API
+      version: 1.0.0
+    servers:
+      - url: https://loom.denkers.co
+    paths:
+      /auth:
+        post:
+          summary: Authenticate user via API key
+          description: Returns the user associated with the provided API key.
+          responses:
+            "200":
+              description: Successful authentication
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      ok:
+                        type: boolean
+                      user:
+                        type: string
+      /cypher:
+        post:
+          summary: Run Cypher query
+          description: Execute Cypher queries on the Neo4j graph database.
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    query:
+                      type: string
+                    params:
+                      type: object
+                    database:
+                      type: string
+                    mode:
+                      type: string
+                      enum: ["read", "write"]
+          responses:
+            "200":
+              description: Successful execution
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      ok:
+                        type: boolean
+                      user:
+                        type: string
+                      results:
+                        type: array
+                        items:
+                          type: object
+      /health:
+        get:
+          summary: Check API health
+          responses:
+            "200":
+              description: Service health info
+      /diagnostics/tier1:
+        get:
+          summary: Run Tier1 system diagnostics
+          responses:
+            "200":
+              description: Tier1 diagnostic results
+    components:
+      securitySchemes:
+        api_key:
+          type: apiKey
+          in: header
+          name: x-api-key
+    security:
+      - api_key: []
+
+  # ===============================
+  # Per-User Setup (example keys)
+  # ===============================
+  users:
+    Adge:
+      api_key: "adge-secret-key"
+    Becky:
+      api_key: "becky-secret-key"
+    Fitz:
+      api_key: "fitz-secret-key"
